@@ -53,10 +53,9 @@ const toAU = (su) => stdlib.parseCurrency(su);
 const toSU = (au) => stdlib.formatCurrency(au, 4);
 
 // Defined all interact as global for backend calls, later convert them to Vue methods
-let commonInteract = { };
-let buyerInteract = { };
-let sellerInteract = { };
-let transportInteract= { };
+let Actor = { };
+let landlordInteract = { };
+let tenantInteract = { };
 
 export default {
   name: 'App',
@@ -70,7 +69,6 @@ export default {
       addr: undefined,
       balAtomic: undefined,
       bal: undefined,
-      faucetLoading: false,
       ctc: undefined,
       ctcInfoStr: undefined,
     
@@ -78,18 +76,37 @@ export default {
   },
    methods: {
 
+       waitUntil (condition) {
+    return new Promise((resolve) => {
+        let interval = setInterval(() => {
+            if (!condition()) {
+                return
+            }
+
+            clearInterval(interval)
+            resolve()
+        }, 100)
+      })
+    },
+
       // Create a Vue methods for every commonInteract methods
       commonFunctions() {
-        commonInteract = {
+        Actor = {
+              leave: async () => {}
           }
       },
 
-     
+
  
     // 0 - seller, 1 - buyer, 2 - transport
     //////////////////////////// Seller methods
-    async laodlord() {
+    async landlord() {
       this.commonFunctions();
+      landlordInteract = {
+        ...Actor,
+        terms,
+      }
+      console.log("Landlord: ", landlordInteract);
 
       try {
           // Set role, create account, 
@@ -116,33 +133,21 @@ export default {
       }
     },
     
-    //////////////////////////// Buyer
+    
+      async attachContract1() {
+        this.ctc = await this.acc.contract(backend, JSON.parse(this.ctcStr));     
+        await this.ctc.p.Tenant(tenantInteract);
 
-    async attachContract1() {
-            this.ctc = await this.acc.contract(backend, JSON.parse(this.ctcStr));     
-            await this.ctc.p.Tenant(tenantInteract);
-
-            console.log("Contract attached: ",this.ctcStr)
+        console.log("Contract attached: ",this.ctcStr)
     },
-
-
-    waitUntil (condition) {
-    return new Promise((resolve) => {
-        let interval = setInterval(() => {
-            if (!condition()) {
-                return
-            }
-
-            clearInterval(interval)
-            resolve()
-        }, 100)
-      })
-    },
-
+    //////////////////////////// Tenant
     async tenant() {
       this.commonFunctions();
-
-      console.log("Tenant: ");
+      tenantInteract = {
+        ...Actor,
+        acceptTerms: async () => {}
+      }
+      console.log("Tenant: ", Tenant);
 
       try {
         // Set role, create account

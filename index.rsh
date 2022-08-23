@@ -3,16 +3,16 @@
 const Actor =
       { ...hasRandom,
         leave: Fun([], Bool) };
-const Landlord =
+const landlordInteract =
       { ...Actor,
         terms: UInt };
-const Tenant =
+const tenantInteract =
       { ...Actor,
         acceptTerms: Fun([UInt], Null) };
 
 const DEADLINE = 10;
 export const lFirst = Reach.App(
-  {}, [Participant('Tenant', Tenant), Participant('Landlord', Landlord)], (T, L) => {
+  {}, [Participant('Tenant', tenantInteract), Participant('Landlord', landlordInteract)], (T, L) => {
 
     L.only(() => {
       const terms = declassify(interact.terms); });
@@ -57,7 +57,7 @@ export const lFirst = Reach.App(
   } );
 
 export const tFirst = Reach.App(
-  {}, [Participant('Tenant', Tenant), Participant('Landlord', Landlord)], (T, L) => {
+  {}, [Participant('Tenant', tenantInteract), Participant('Landlord', landlordInteract)], (T, L) => {
 
     L.only(() => {
       const terms = declassify(interact.terms); });
@@ -102,7 +102,7 @@ export const tFirst = Reach.App(
   } );
 
 export const fair = Reach.App(
-  {}, [Participant('Tenant', Tenant), Participant('Landlord', Landlord)], (T, L) => {
+  {}, [Participant('Tenant', tenantInteract), Participant('Landlord', landlordInteract)], (T, L) => {
 
     L.only(() => {
       const terms = declassify(interact.terms); });
