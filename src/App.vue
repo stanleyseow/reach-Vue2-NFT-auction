@@ -1,11 +1,9 @@
 d<template>
   <div id="app">
 
-  <H1>Reach Rental Agreement</H1>
+  <H1>Reach NFT Auction</H1>
 
-    <button @click="landlord()"> Landbord</button>
-    <button @click="tenant()"> Tenant</button>
-    <BR/>
+   
   
   <HR/>
 
@@ -76,7 +74,7 @@ export default {
   },
    methods: {
 
-       waitUntil (condition) {
+    waitUntil (condition) {
     return new Promise((resolve) => {
         let interval = setInterval(() => {
             if (!condition()) {
@@ -89,12 +87,12 @@ export default {
       })
     },
 
-      // Create a Vue methods for every commonInteract methods
-      commonFunctions() {
-        Actor = {
+    // Create a Vue methods for every commonInteract methods
+    commonFunctions() {
+      Actor = {
               leave: async () => {}
           }
-      },
+    },
 
 
  

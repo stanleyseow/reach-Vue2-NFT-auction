@@ -1,155 +1,85 @@
 'reach 0.1';
 
-const Actor =
-      { ...hasRandom,
-        leave: Fun([], Bool) };
-const landlordInteract =
-      { ...Actor,
-        terms: UInt };
-const tenantInteract =
-      { ...Actor,
-        acceptTerms: Fun([UInt], Null) };
+const AuctionProps = Object({
+  startingBid: UInt,
+  timeout: UInt});
 
-const DEADLINE = 10;
-export const lFirst = Reach.App(
-  {}, [Participant('Tenant', tenantInteract), Participant('Landlord', landlordInteract)], (T, L) => {
+const BidderProps = {
+  getBid: Fun([UInt], Maybe(UInt)) };
 
-    L.only(() => {
-      const terms = declassify(interact.terms); });
-    L.publish(terms)
-      .pay(terms);
-    commit();
+const OwnerInterface = {
+  showOwner: Fun([UInt, Address], Null),
+  getAuctionProps: Fun([], AuctionProps),
+  ...BidderProps };
 
-    T.only(() => {
-      interact.acceptTerms(terms); });
-    T.pay(terms)
-      .timeout(relativeTime(DEADLINE), () => closeTo(L, () => null));
-    commit();
+const CreatorInterface = {
+  ...OwnerInterface,
+  getId: Fun([], UInt) };
 
-    L.only(() => {
-      const leaveL = declassify(interact.leave()); });
-    L.publish(leaveL)
-      .timeout(relativeTime(DEADLINE), () => closeTo(T, () => null));
+const emptyAuction = { startingBid: 0, timeout: 0 };
 
-    if ( leaveL ) {
-      transfer(2 * terms).to(T);
-      commit();
-      exit();
-    } else {
+export const main = Reach.App(() => {
+
+    const Creator = Participant('Creator', CreatorInterface);
+    const Owner = ParticipantClass('Owner', OwnerInterface);
+    init();
+
+    Creator.only(() => {
+      const id = declassify(interact.getId());
+    });
+    Creator.publish(id);
+
+    var owner = Creator;
+    invariant(balance() == 0);
+    while (true) {
       commit();
 
-      T.only(() => {
-        const leaveT = declassify(interact.leave()); });
-      T.publish(leaveT)
-        .timeout(relativeTime(DEADLINE), () => closeTo(L, () => null));
+      // Have the owner publish info about the auction
+      Owner.only(() => {
+        interact.showOwner(id, owner);
+        const amOwner = this == owner;
+        const { startingBid, timeout } =
+          amOwner ? declassify(interact.getAuctionProps()) : emptyAuction;
+      });
+      Owner
+        .publish(startingBid, timeout)
+        .when(amOwner)
+        .timeout(false);
 
-      if ( leaveT ) {
-        transfer(2 * terms).to(L);
-        commit();
-        exit();
-      } else {
-        transfer(terms).to(L);
-        transfer(terms).to(T);
-        commit();
-        exit();
-      }
-    }
-  } );
+      const [ timeRemaining, keepGoing ] = makeDeadline(timeout);
 
-export const tFirst = Reach.App(
-  {}, [Participant('Tenant', tenantInteract), Participant('Landlord', landlordInteract)], (T, L) => {
+      // Let them fight for the best bid
+      const [ winner, isFirstBid, currentPrice ] =
+        parallelReduce([ owner, true, startingBid ])
+          .invariant(balance() == (isFirstBid ? 0 : currentPrice))
+          .while(keepGoing())
+          .case(Owner,
+            () => {
+              const mbid = (this != owner && this != winner)
+                ? declassify(interact.getBid(currentPrice))
+                : Maybe(UInt).None();
+              return ({
+                when: maybe(mbid, false, ((bid) => bid > currentPrice)),
+                msg : fromSome(mbid, 0),
+              });
+            },
+            (bid) => bid,
+            (bid) => {
+              require(bid > currentPrice);
+              // Return funds to previous highest bidder
+              transfer(isFirstBid ? 0 : currentPrice).to(winner);
+              return [ this, false, bid ];
+            }
+          )
+          .timeRemaining(timeRemaining());
 
-    L.only(() => {
-      const terms = declassify(interact.terms); });
-    L.publish(terms)
-      .pay(terms);
-    commit();
+      transfer(isFirstBid ? 0 : currentPrice).to(owner);
 
-    T.only(() => {
-      interact.acceptTerms(terms); });
-    T.pay(terms)
-      .timeout(relativeTime(DEADLINE), () => closeTo(L, () => null));
-    commit();
+      owner = winner;
+      continue;
+    };
 
-    T.only(() => {
-      const leaveT = declassify(interact.leave()); });
-    T.publish(leaveT)
-      .timeout(relativeTime(DEADLINE), () => closeTo(L, () => null));
-
-    if ( leaveT ) {
-      transfer(2 * terms).to(L);
-      commit();
-      exit();
-    } else {
-      commit();
-
-      L.only(() => {
-        const leaveL = declassify(interact.leave()); });
-      L.publish(leaveL)
-        .timeout(relativeTime(DEADLINE), () => closeTo(T, () => null));
-
-      if ( leaveL ) {
-        transfer(2 * terms).to(T);
-        commit();
-        exit();
-      } else {
-        transfer(terms).to(L);
-        transfer(terms).to(T);
-        commit();
-        exit();
-      }
-    }
-  } );
-
-export const fair = Reach.App(
-  {}, [Participant('Tenant', tenantInteract), Participant('Landlord', landlordInteract)], (T, L) => {
-
-    L.only(() => {
-      const terms = declassify(interact.terms); });
-    L.publish(terms)
-      .pay(terms);
-    commit();
-
-    T.only(() => {
-      interact.acceptTerms(terms); });
-    T.pay(terms)
-      .timeout(relativeTime(DEADLINE), () => closeTo(L, () => null));
-
-    var [ gleaveT, gleaveL ] = [ false, false ];
-    invariant(balance() == 2 * terms);
-    while ( ! (gleaveT || gleaveL) ) {
-      commit();
-
-      T.only(() => {
-        const _leaveT = interact.leave();
-        const [_commitT, _saltT] = makeCommitment(interact, _leaveT);
-        const commitT = declassify(_commitT); });
-      T.publish(commitT)
-        .timeout(relativeTime(DEADLINE), () => closeTo(L, () => null));
-      commit();
-
-      unknowable(L, T(_leaveT, _saltT));
-      L.only(() => {
-        const leaveL = declassify(interact.leave()); });
-      L.publish(leaveL)
-        .timeout(relativeTime(DEADLINE), () => closeTo(T, () => null));
-      commit();
-
-      T.only(() => {
-        const [saltT, leaveT] = declassify([_saltT, _leaveT]); });
-      T.publish(saltT, leaveT);
-      checkCommitment(commitT, saltT, leaveT);
-
-      [ gleaveT, gleaveL ] = [ leaveT, leaveL ];
-      continue; }
-
-    const [ toL, toT ] =
-          ( gleaveT && gleaveT ) ? [ 1, 1 ] :
-          ( gleaveT            ) ? [ 2, 0 ] :
-          [ 0, 2 ];
-    transfer(toL * terms).to(L);
-    transfer(toT * terms).to(T);
     commit();
     exit();
 
-  } );
+  });
