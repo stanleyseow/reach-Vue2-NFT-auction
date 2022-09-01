@@ -145,23 +145,7 @@ export default {
     // Create a Vue methods for every commonInteract methods
     commonFunctions() {
       playerInterface = {
-        //   ...hasRandom,
-        //   getHand: Fun([], UInt),
-        //   seeOutcome: Fun([UInt], Null),
-        //   informTimeout: Fun([], Null),
         ...stdlib.hasRandom,
-
-        //   interact.getHand = async () => {
-        //   const hand = await ask.ask(`What hand will you play?`, (x) => {
-        //     const hand = HANDS[x];
-        //     if ( hand === undefined ) {
-        //       throw Error(`Not a valid hand ${hand}`);
-        //     }
-        //     return hand;
-        //   });
-        //   console.log(`You played ${HAND[hand]}`);
-        //   return hand;
-        // };
         getHand: async () => {
           console.log("getHand called from backend");
           this.getHandState = true
@@ -241,10 +225,6 @@ export default {
 
         aInterface = {
         ...playerInterface,
-        //  wager: UInt, // atomic units of currency
-        //  deadline: UInt, // time delta (blocks/rounds)
-        //  deadline = { ETH: 100, ALGO: 100, CFX: 1000 }[stdlib.connector];
-        //wager: stdlib.parseCurrency(toAU(this.wager)),
         wager: this.wagerAtomic,
         deadline: stdlib.parseCurrency(10),
       };
@@ -279,7 +259,6 @@ export default {
       this.commonFunctions();
       bInterface = {
         ...playerInterface,
-        //acceptWager: Fun([UInt], Null),
         acceptWager: async (wager) => {
           console.log("*** acceptWager", wager);
           this.wagerAtomic = wager;
