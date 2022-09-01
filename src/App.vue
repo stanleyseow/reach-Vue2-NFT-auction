@@ -1,65 +1,100 @@
-d<template>
+<template>
   <div id="app">
+    <H1>Vue2 Reach Rock Paper Scissors </H1>
 
-  <H1>Reach NFT Auction</H1>
+    <H3>Choose your role:</H3>
+    <button @click="Alice()">Alice</button>
+    <button @click="Bob()">Bob</button>
 
-   
-  
-  <HR/>
+    <BR />
 
-  <div v-if="role==0">
-  <h3>Landlord</h3>
-  contract: (Copy below to Tenant)<BR/> 
-  {{ctcInfoStr}}<BR/><BR/>
+    <HR />
 
-  addr: {{ addr}} <BR/>
+    <div v-if="role == 1">
+      <h3>Alice - Contract Creator</h3>
 
-  </div>
+      Enter wager amount?
+      <input v-model="wager" placeholder="" />
+      <button @click="attachContract(wager)">Submit</button> <BR/>
 
-  <div v-else-if="role==1">
-  <h3>Tenant</h3>
-  addr: {{ addr}} <BR/>
-  <input v-model="ctcStr" placeholder="paste contract here"> <button @click="attachContract1()">Attach Contract</button>
-  
-    <BR/>  
-  </div>
+      contract: (Copy below to Bob)<BR /><BR /> {{ ctcInfoStr }}<BR /><BR />
+
+      <div v-if="getHandState && role==1">
+          Play your hand : <BR/>
+          <button @click="readHand(0)">ROCK</button>
+          <button @click="readHand(1)">PAPER</button>
+          <button @click="readHand(2)">SCISSORS</button> 
+          <BR/>
+      </div>
+
+      <BR/>
+      wager: {{ wager }} <BR/>
+      bal: {{ bal }}<BR /> addr: {{ addr }} <BR />
+
+
+    </div>
 
 
 
-  <BR/>
+    <div v-else-if="role == 2">
+      <h3>Bob - Contract Attacher</h3>
 
-  <HR/>
-  bal: {{ bal }} <BR/>
-  balAtomic: {{ balAtomic }}<BR/>
 
-  <button @click="updateBalance()">updateBalance</button>
+      wager: {{ wager }} <BR/>
+      bal: {{ bal }}<BR /> addr: {{ addr }} <BR />
+      <input v-model="ctcInfoStr" placeholder="paste contract here" />
+      <button @click="attachContract1()">Attach Contract</button>
 
+       <div v-if="wager>0">
+        Do you want to accept wager of {{wager}} ? 
+      <button @click="yesnoWager(true)">YES</button>
+      <button @click="yesnoWager(false)">NO</button>
+    </div>
+      <BR />
+
+      <div v-if="getHandState && role==2">
+          Play your hand : <BR/>
+          <button @click="readHand(0)">ROCK</button>
+          <button @click="readHand(1)">PAPER</button>
+          <button @click="readHand(2)">SCISSORS</button> 
+          <BR/>
+      </div>
+
+    </div>
+
+    <BR />
+
+    <HR />
+    bal: {{ bal }} <BR /> balAtomic: {{ balAtomic }}<BR />
+
+    <button @click="updateBalance()">updateBalance</button>
   </div>
 </template>
 
 <script>
-import * as backend from '../build/index.main.mjs';
-import { loadStdlib } from '@reach-sh/stdlib';
+import * as backend from "../build/index.main.mjs";
+import { loadStdlib } from "@reach-sh/stdlib";
 //const stdlib = loadStdlib(process.env);
 const stdlib = loadStdlib("ALGO");
 
 console.log(`The consensus network is ${stdlib.connector}.`);
 
 const suStr = stdlib.standardUnit;
-console.log("Unit is ", suStr)
-const toAU = (su) => stdlib.parseCurrency(su);
+console.log("Unit is ", suStr);
+//const toAU = (su) => stdlib.parseCurrency(su);
 const toSU = (au) => stdlib.formatCurrency(au, 4);
 
 // Defined all interact as global for backend calls, later convert them to Vue methods
-let Actor = { };
-let landlordInteract = { };
-let tenantInteract = { };
+let playerInterface = {};
+let aInterface = {};
+let bInterface = {};
+
+const HANDS = ["Rock", "Paper", "Scissors"]
+const OUTCOME = ["Bob wins", "Draw", "Alice wins"];
 
 export default {
-  name: 'App',
-  components: {
-    //WizardSteps
-  },
+  name: "App",
+  components: {},
   data: () => {
     return {
       role: 0,
@@ -68,95 +103,36 @@ export default {
       balAtomic: undefined,
       bal: undefined,
       ctc: undefined,
+
       ctcInfoStr: undefined,
-    
+      timeout: undefined,
+      tempHand: undefined,
+      hand: undefined,
+      wager: undefined,
+      wagerAtomic: undefined,
+      acceptWager: undefined,
+
+      // Keep track of different states
+      getHandState: false,
+      outcomeState: false,
+      timeoutState: false,
+      paymentState: false,
+
     };
   },
-   methods: {
-
-    waitUntil (condition) {
-    return new Promise((resolve) => {
+  methods: {
+    waitUntil(condition) {
+      return new Promise((resolve) => {
         let interval = setInterval(() => {
-            if (!condition()) {
-                return
-            }
-
-            clearInterval(interval)
-            resolve()
-        }, 100)
-      })
-    },
-
-    // Create a Vue methods for every commonInteract methods
-    commonFunctions() {
-      Actor = {
-              leave: async () => {}
+          if (!condition()) {
+            return;
           }
+          clearInterval(interval);
+          resolve();
+        }, 100);
+      });
     },
 
-
- 
-    // 0 - seller, 1 - buyer, 2 - transport
-    //////////////////////////// Seller methods
-    async landlord() {
-      this.commonFunctions();
-      landlordInteract = {
-        ...Actor,
-        terms,
-      }
-      console.log("Landlord: ", landlordInteract);
-
-      try {
-          // Set role, create account, 
-          this.role = 0;
-          this.acc = await stdlib.newTestAccount(stdlib.parseCurrency(1000));
-          //console.log("this.acc: ", this.acc)
-
-          this.addr = stdlib.formatAddress(this.acc.getAddress());
-
-          this.balAtomic = await stdlib.balanceOf(this.acc);
-          this.bal = String(stdlib.formatCurrency(this.balAtomic, 4));
-          //console.log("this.bal: ",this.bal)
-
-          // create the contract here
-          // https://docs.reach.sh/frontend/#ref-frontends-js-ctc
-          this.ctc = await this.acc.contract(backend);
-          console.log("this.ctc: ", this.ctc)
-
-          // bind all the seller methods
-          await this.ctc.p.Landlord(landlordInteract);
-
-      } catch (err) {
-        console.log(err);
-      }
-    },
-    
-    
-      async attachContract1() {
-        this.ctc = await this.acc.contract(backend, JSON.parse(this.ctcStr));     
-        await this.ctc.p.Tenant(tenantInteract);
-
-        console.log("Contract attached: ",this.ctcStr)
-    },
-    //////////////////////////// Tenant
-    async tenant() {
-      this.commonFunctions();
-      tenantInteract = {
-        ...Actor,
-        acceptTerms: async () => {}
-      }
-      console.log("Tenant: ", Tenant);
-
-      try {
-        // Set role, create account
-          this.role = 1;
-          this.acc = await stdlib.newTestAccount(stdlib.parseCurrency(1000));
-          this.addr = stdlib.formatAddress(this.acc.getAddress());
-      } catch (err) {
-        console.log(err);
-      }
-    },  
-    
     async updateBalance() {
       try {
         this.balAtomic = await stdlib.balanceOf(this.acc);
@@ -165,10 +141,178 @@ export default {
         console.log(err);
       }
     },
+
+    // Create a Vue methods for every commonInteract methods
+    commonFunctions() {
+      playerInterface = {
+        //   ...hasRandom,
+        //   getHand: Fun([], UInt),
+        //   seeOutcome: Fun([UInt], Null),
+        //   informTimeout: Fun([], Null),
+        ...stdlib.hasRandom,
+
+        //   interact.getHand = async () => {
+        //   const hand = await ask.ask(`What hand will you play?`, (x) => {
+        //     const hand = HANDS[x];
+        //     if ( hand === undefined ) {
+        //       throw Error(`Not a valid hand ${hand}`);
+        //     }
+        //     return hand;
+        //   });
+        //   console.log(`You played ${HAND[hand]}`);
+        //   return hand;
+        // };
+        getHand: async () => {
+          console.log("getHand called from backend");
+          this.getHandState = true
+          await this.waitUntil(() => this.hand !== undefined );
+          console.log("You played ", HANDS[this.hand]);
+          const hand = stdlib.parseCurrency(this.hand);
+          console.log(hand)
+          return hand
+        },
+
+        seeOutcome: async (outcome) => {
+          console.log("seeOutcome called from backend", outcome);
+          this.outcomeState = true;
+          this.seeOutcome(outcome);
+        },
+
+        informTimeout: async () => { 
+          console.log("informTimeout called from backend");
+          this.timeoutState = true;
+          this.informTimeout();
+          },
+
+        reportPayment: (payment) => { 
+          console.log("reportPayment called from backend", payment);
+          this.paymentState = true;
+          this.reportPayment(payment); 
+          },
+
+      };
+    },
+
+    // Mapped backend method to Vue methods
+
+      reportPayment(payment) {
+        this.paymentMsg = 'Payment of ' + toSU(payment) + ' send to the contract';
+        console.log('Payment of ' + toSU(payment) + ' send to the contract');
+      },
+
+    async seeOutcome(outcome) {
+      console.log("seeOutcome", OUTCOME[outcome]);
+    },
+
+    async informTimeout() {
+      console.log(`There was a timeout.`);
+      process.exit(1);
+    },
+
+    readHand(hand) {
+      console.log("readHand hand: ", hand)
+      this.hand = hand;
+      console.log("hand: ", this.hand)
+    },
+
+    //////////////////////////// Alice methods
+    async Alice() {
+      this.commonFunctions();
+
+      try {
+        // Set role, create account,
+        this.role = 1;
+        this.acc = await stdlib.newTestAccount(stdlib.parseCurrency(1000));
+        //console.log("this.acc: ", this.acc)
+
+        this.addr = stdlib.formatAddress(this.acc.getAddress());
+
+        this.balAtomic = await stdlib.balanceOf(this.acc);
+        this.bal = String(stdlib.formatCurrency(this.balAtomic, 4));
+
+      } catch (err) {
+        console.log(err);
+      }
+    },
+
+    async attachContract(wager) {
+
+        this.wagerAtomic = await stdlib.parseCurrency(wager);
+
+        aInterface = {
+        ...playerInterface,
+        //  wager: UInt, // atomic units of currency
+        //  deadline: UInt, // time delta (blocks/rounds)
+        //  deadline = { ETH: 100, ALGO: 100, CFX: 1000 }[stdlib.connector];
+        //wager: stdlib.parseCurrency(toAU(this.wager)),
+        wager: this.wagerAtomic,
+        deadline: stdlib.parseCurrency(10),
+      };
+      console.log("Alice: ", aInterface);
+
+      
+        this.ctc = await this.acc.contract(backend);
+        console.log("this.ctc: ", this.ctc);
+
+        // Get contract info after it was deployed and assign to this.ctcInfoStr
+        this.ctc.getInfo().then((info) => {
+          console.log("getInfo(): ", info);
+          this.ctcInfoStr = JSON.stringify(info);
+        });
+
+        console.log("updateBalance");
+        this.updateBalance();
+
+        // bind all the seller methods
+        console.log("aInterface");
+        await this.ctc.p.Alice(aInterface);
+
+    },
+
+    async yesnoWager(res) {
+        console.log("yesnoWager: ", res)
+        this.acceptWager = res;
+    },
+
+    //////////////////////////// Bob Methods
+    async Bob() {
+      this.commonFunctions();
+      bInterface = {
+        ...playerInterface,
+        //acceptWager: Fun([UInt], Null),
+        acceptWager: async (wager) => {
+          console.log("*** acceptWager", wager);
+          this.wagerAtomic = wager;
+          this.wager =  String(stdlib.formatCurrency(this.wagerAtomic, 4));
+          this.waitUntil( ()=> this.acceptWager !== undefined)
+        },
+      };
+      console.log("Bob: ", bInterface);
+
+      try {
+        // Set role, create account
+        this.role = 2;
+        this.acc = await stdlib.newTestAccount(stdlib.parseCurrency(1000));
+        this.addr = stdlib.formatAddress(this.acc.getAddress());
+      } catch (err) {
+        console.log(err);
+      }
+    },
+
+    async attachContract1() {
+      this.ctc = await this.acc.contract(backend, JSON.parse(this.ctcInfoStr));
+      await this.ctc.p.Bob(bInterface);
+
+      this.updateBalance();
+
+      console.log("Contract attached: ", this.ctcInfoStr);
+    },
   },
-  mounted() {
-  }
-}
+  computed: {
+
+  },
+  mounted() {},
+};
 </script>
 
 <style>

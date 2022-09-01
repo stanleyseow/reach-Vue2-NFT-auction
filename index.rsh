@@ -1,85 +1,108 @@
 'reach 0.1';
 
-const AuctionProps = Object({
-  startingBid: UInt,
-  timeout: UInt});
+const [ isHand, ROCK, PAPER, SCISSORS ] = makeEnum(3);
+const [ isOutcome, B_WINS, DRAW, A_WINS ] = makeEnum(3);
 
-const BidderProps = {
-  getBid: Fun([UInt], Maybe(UInt)) };
+const winner = (handAlice, handBob) =>
+  ((handAlice + (4 - handBob)) % 3);
 
-const OwnerInterface = {
-  showOwner: Fun([UInt, Address], Null),
-  getAuctionProps: Fun([], AuctionProps),
-  ...BidderProps };
+assert(winner(ROCK, PAPER) == B_WINS);
+assert(winner(PAPER, ROCK) == A_WINS);
+assert(winner(ROCK, ROCK) == DRAW);
 
-const CreatorInterface = {
-  ...OwnerInterface,
-  getId: Fun([], UInt) };
+forall(UInt, handAlice =>
+  forall(UInt, handBob =>
+    assert(isOutcome(winner(handAlice, handBob)))));
 
-const emptyAuction = { startingBid: 0, timeout: 0 };
+forall(UInt, (hand) =>
+  assert(winner(hand, hand) == DRAW));
+
+const playerInterface = {
+  ...hasRandom,
+  getHand: Fun([], UInt),
+  seeOutcome: Fun([UInt], Null),
+  informTimeout: Fun([], Null),
+  reportPayment: Fun([UInt], Null)
+};
+
+const aInterface = {
+  ...playerInterface,
+  wager: UInt, // atomic units of currency
+  deadline: UInt, // time delta (blocks/rounds)
+}
+
+const bInterface = {
+  ...playerInterface,
+  acceptWager: Fun([UInt], Null),
+}
 
 export const main = Reach.App(() => {
+  const Alice = Participant('Alice', aInterface);
+  const Bob   = Participant('Bob', bInterface);
+  init();
 
-    const Creator = Participant('Creator', CreatorInterface);
-    const Owner = ParticipantClass('Owner', OwnerInterface);
-    init();
-
-    Creator.only(() => {
-      const id = declassify(interact.getId());
+  const informTimeout = () => {
+    each([Alice, Bob], () => {
+      interact.informTimeout();
     });
-    Creator.publish(id);
+  };
 
-    var owner = Creator;
-    invariant(balance() == 0);
-    while (true) {
-      commit();
-
-      // Have the owner publish info about the auction
-      Owner.only(() => {
-        interact.showOwner(id, owner);
-        const amOwner = this == owner;
-        const { startingBid, timeout } =
-          amOwner ? declassify(interact.getAuctionProps()) : emptyAuction;
-      });
-      Owner
-        .publish(startingBid, timeout)
-        .when(amOwner)
-        .timeout(false);
-
-      const [ timeRemaining, keepGoing ] = makeDeadline(timeout);
-
-      // Let them fight for the best bid
-      const [ winner, isFirstBid, currentPrice ] =
-        parallelReduce([ owner, true, startingBid ])
-          .invariant(balance() == (isFirstBid ? 0 : currentPrice))
-          .while(keepGoing())
-          .case(Owner,
-            () => {
-              const mbid = (this != owner && this != winner)
-                ? declassify(interact.getBid(currentPrice))
-                : Maybe(UInt).None();
-              return ({
-                when: maybe(mbid, false, ((bid) => bid > currentPrice)),
-                msg : fromSome(mbid, 0),
-              });
-            },
-            (bid) => bid,
-            (bid) => {
-              require(bid > currentPrice);
-              // Return funds to previous highest bidder
-              transfer(isFirstBid ? 0 : currentPrice).to(winner);
-              return [ this, false, bid ];
-            }
-          )
-          .timeRemaining(timeRemaining());
-
-      transfer(isFirstBid ? 0 : currentPrice).to(owner);
-
-      owner = winner;
-      continue;
-    };
-
-    commit();
-    exit();
-
+  Alice.only(() => {
+    const wager = declassify(interact.wager);
+    const deadline = declassify(interact.deadline);
   });
+  Alice.publish(wager, deadline)
+    .pay(wager);
+    each([Alice,Bob], () => interact.reportPayment(wager));
+  commit();
+
+  Bob.only(() => {
+    interact.acceptWager(wager);
+  });
+  Bob.pay(wager)
+    .timeout(relativeTime(deadline), () => closeTo(Alice, informTimeout));
+    each([Alice,Bob], () => interact.reportPayment(wager));
+
+
+  var outcome = DRAW;
+  invariant( balance() == 2 * wager && isOutcome(outcome) );
+  while ( outcome == DRAW ) {
+    commit();
+
+    Alice.only(() => {
+      const _handAlice = interact.getHand();
+      const [_commitAlice, _saltAlice] = makeCommitment(interact, _handAlice);
+      const commitAlice = declassify(_commitAlice);
+    });
+    Alice.publish(commitAlice)
+      .timeout(relativeTime(deadline), () => closeTo(Bob, informTimeout));
+    commit();
+
+    unknowable(Bob, Alice(_handAlice, _saltAlice));
+    Bob.only(() => {
+      const handBob = declassify(interact.getHand());
+    });
+    Bob.publish(handBob)
+      .timeout(relativeTime(deadline), () => closeTo(Alice, informTimeout));
+    commit();
+
+    Alice.only(() => {
+      const saltAlice = declassify(_saltAlice);
+      const handAlice = declassify(_handAlice);
+    });
+    Alice.publish(saltAlice, handAlice)
+      .timeout(relativeTime(deadline), () => closeTo(Bob, informTimeout));
+    checkCommitment(commitAlice, saltAlice, handAlice);
+
+    outcome = winner(handAlice, handBob);
+    continue;
+  }
+
+  assert(outcome == A_WINS || outcome == B_WINS);
+  transfer(2 * wager).to(outcome == A_WINS ? Alice : Bob);
+  commit();
+
+  each([Alice, Bob], () => {
+    interact.seeOutcome(outcome);
+  });
+});

@@ -1,99 +1,103 @@
-import { loadStdlib } from '@reach-sh/stdlib';
+import { loadStdlib, ask } from '@reach-sh/stdlib';
 import * as backend from './build/index.main.mjs';
+const stdlib = loadStdlib();
 
-  const stdlib = loadStdlib();
-  const timeoutK = stdlib.connector === 'ALGO' ? 1 : 3;
-  const startingBalance = stdlib.parseCurrency(100);
-  const fmt = (x) => stdlib.formatCurrency(x, 4);
-  const getBalance = async (who) => fmt(await stdlib.balanceOf(who));
+const isAlice = await ask.ask(
+  `Are you Alice?`,
+  ask.yesno
+);
+const who = isAlice ? 'Alice' : 'Bob';
 
-  const [ accAlice, accBob, accClaire ] =
-    await stdlib.newTestAccounts(3, startingBalance);
+console.log(`Starting Rock, Paper, Scissors! as ${who}`);
 
-  const ctcAlice = accAlice.contract(backend);
+let acc = null;
+const createAcc = await ask.ask(
+  `Would you like to create an account? (only possible on devnet)`,
+  ask.yesno
+);
+if (createAcc) {
+  acc = await stdlib.newTestAccount(stdlib.parseCurrency(1000));
+} else {
+  const secret = await ask.ask(
+    `What is your account secret?`,
+    (x => x)
+  );
+  acc = await stdlib.newAccountFromSecret(secret);
+}
 
-  const everyone = [
-    [' Alice', accAlice],
-    ['   Bob', accBob],
-    ['Claire', accClaire],
-  ];
-  for ( const [ lab, acc ] of everyone ) {
-    acc.setDebugLabel(lab);
-  }
+let ctc = null;
+if (isAlice) {
+  ctc = acc.contract(backend);
+  ctc.getInfo().then((info) => {
+    console.log(`The contract is deployed as = ${JSON.stringify(info)}`); });
+} else {
+  const info = await ask.ask(
+    `Please paste the contract information:`,
+    JSON.parse
+  );
+  ctc = acc.contract(backend, info);
+}
 
-  const randomArrayRef = (arr) =>
-    arr[Math.floor(Math.random() * arr.length)];
+const fmt = (x) => stdlib.formatCurrency(x, 4);
+const getBalance = async () => fmt(await stdlib.balanceOf(acc));
 
-  const auctionProps = {
-    ' Alice': {
-      startingBid: stdlib.parseCurrency(0),
-      timeout: timeoutK * 3,
-    },
-    '   Bob': {
-      startingBid: stdlib.parseCurrency(1),
-      timeout: timeoutK * 3,
-    },
-    'Claire': {
-      startingBid: stdlib.parseCurrency(3),
-      timeout: timeoutK * 4,
+const before = await getBalance();
+console.log(`Your balance is ${before}`);
+
+const interact = { ...stdlib.hasRandom };
+
+interact.informTimeout = () => {
+  console.log(`There was a timeout.`);
+  process.exit(1);
+};
+
+if (isAlice) {
+  const amt = await ask.ask(
+    `How much do you want to wager?`,
+    stdlib.parseCurrency
+  );
+  interact.wager = amt;
+  interact.deadline = { ETH: 100, ALGO: 100, CFX: 1000 }[stdlib.connector];
+} else {
+  interact.acceptWager = async (amt) => {
+    const accepted = await ask.ask(
+      `Do you accept the wager of ${fmt(amt)}?`,
+      ask.yesno
+    );
+    if (!accepted) {
+      process.exit(0);
     }
   };
+}
 
-  const bids = {
-    ' Alice': {
-      maxBid: stdlib.parseCurrency(7),
-    },
-    '   Bob': {
-      maxBid: stdlib.parseCurrency(40),
-    },
-    'Claire': {
-      maxBid: stdlib.parseCurrency(20),
+const HAND = ['Rock', 'Paper', 'Scissors'];
+const HANDS = {
+  'Rock': 0, 'R': 0, 'r': 0,
+  'Paper': 1, 'P': 1, 'p': 1,
+  'Scissors': 2, 'S': 2, 's': 2,
+};
+
+interact.getHand = async () => {
+  const hand = await ask.ask(`What hand will you play?`, (x) => {
+    const hand = HANDS[x];
+    if ( hand === undefined ) {
+      throw Error(`Not a valid hand ${hand}`);
     }
-  };
+    return hand;
+  });
+  console.log(`You played ${HAND[hand]}`);
+  return hand;
+};
 
-  const trades = {
-    ' Alice': 0, '   Bob': 0, 'Claire': 0
-  };
+const OUTCOME = ['Bob wins', 'Draw', 'Alice wins'];
+interact.seeOutcome = async (outcome) => {
+  console.log(`The outcome is: ${OUTCOME[outcome]}`);
+};
 
-  const makeOwner = (acc, who) => {
-    const ctc = acc.contract(backend, ctcAlice.getInfo());
-    const others = everyone.filter(x => x[0] !== who);
-    return ctc.p.Owner({
-      showOwner: ((id, owner) => {
-        if ( stdlib.addressEq(owner, acc) ) {
-          console.log(`\n${who} owns it\n`);
-          if ( trades[who] == 2 ) {
-            console.log(`${who} stops`);
-            process.exit(0);
-          } else {
-            trades[who] += 1;
-          }
-        }
-      }),
-      getAuctionProps: (() => {
-        console.log(`${who} starts the bidding at ${fmt(auctionProps[who].startingBid)}`);
-        return auctionProps[who];
-      }),
-      getBid: (price) => {
-        if (price < bids[who].maxBid) {
-          const bid = stdlib.add(price, stdlib.parseCurrency(1));
-          console.log(`${who} tries to bid ${fmt(bid)} (based on price: ${fmt(price)})`);
-          return ['Some', bid];
-        } else {
-          return ['None', null];
-        }
-      },
-    });
-  };
+const part = isAlice ? ctc.p.Alice : ctc.p.Bob;
+await part(interact);
 
-  await Promise.all([
-    ctcAlice.p.Creator({
-      getId: () => {
-        const id = stdlib.randomUInt();
-        console.log(` Alice makes id #${id}`);
-        return id; }
-    }),
-    makeOwner(accAlice , ' Alice'),
-    makeOwner(accBob   , '   Bob'),
-    makeOwner(accClaire, 'Claire'),
-  ]);
+const after = await getBalance();
+console.log(`Your balance is now ${after}`);
+
+ask.done();
