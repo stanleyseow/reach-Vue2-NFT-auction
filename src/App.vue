@@ -82,7 +82,9 @@ console.log(`The consensus network is ${stdlib.connector}.`);
 const suStr = stdlib.standardUnit;
 console.log("Unit is ", suStr);
 //const toAU = (su) => stdlib.parseCurrency(su);
-const toSU = (au) => stdlib.formatCurrency(au, 4);
+//const toSU = (au) => stdlib.formatCurrency(au, 4);
+const fmt = (x) => stdlib.formatCurrency(x, 4);
+
 
 // Defined all interact as global for backend calls, later convert them to Vue methods
 let playerInterface = {};
@@ -148,11 +150,14 @@ export default {
         ...stdlib.hasRandom,
         getHand: async () => {
           console.log("getHand called from backend");
+
+          // this will use v-if to display the input
           this.getHandState = true
+          // waitUtil hand is not undefined
           await this.waitUntil(() => this.hand !== undefined );
           console.log("You played ", HANDS[this.hand]);
           const hand = stdlib.parseCurrency(this.hand);
-          console.log(hand)
+          console.log(fmt(hand))
           return hand
         },
 
@@ -169,7 +174,7 @@ export default {
           },
 
         reportPayment: (payment) => { 
-          console.log("reportPayment called from backend", payment);
+          console.log("reportPayment called from backend", fmt(payment));
           this.paymentState = true;
           this.reportPayment(payment); 
           },
@@ -179,9 +184,12 @@ export default {
 
     // Mapped backend method to Vue methods
 
-      reportPayment(payment) {
-        this.paymentMsg = 'Payment of ' + toSU(payment) + ' send to the contract';
-        console.log('Payment of ' + toSU(payment) + ' send to the contract');
+      async reportPayment(payment) {
+        this.paymentMsg = 'Payment of ' + fmt(payment) + ' send to the contract';
+        console.log('Payment of ' + fmt(payment) + ' send to the contract');
+        
+        console.log("updateBalance");
+        await this.updateBalance();
       },
 
     async seeOutcome(outcome) {
@@ -212,7 +220,9 @@ export default {
         this.addr = stdlib.formatAddress(this.acc.getAddress());
 
         this.balAtomic = await stdlib.balanceOf(this.acc);
-        this.bal = String(stdlib.formatCurrency(this.balAtomic, 4));
+        //this.bal = String(stdlib.formatCurrency(this.balAtomic, 4));
+        this.bal = fmt(this.balAtomic);
+
 
       } catch (err) {
         console.log(err);
@@ -240,12 +250,11 @@ export default {
           this.ctcInfoStr = JSON.stringify(info);
         });
 
-        console.log("updateBalance");
-        this.updateBalance();
-
         // bind all the seller methods
         console.log("aInterface");
         await this.ctc.p.Alice(aInterface);
+
+   
 
     },
 
@@ -264,6 +273,9 @@ export default {
           this.wagerAtomic = wager;
           this.wager =  String(stdlib.formatCurrency(this.wagerAtomic, 4));
           this.waitUntil( ()=> this.acceptWager !== undefined)
+          if ( this.acceptWager == false) {
+              process.exit(0);
+          }
         },
       };
       console.log("Bob: ", bInterface);
