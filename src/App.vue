@@ -237,25 +237,19 @@ export default {
         ...playerInterface,
         wager: this.wagerAtomic,
         deadline: stdlib.parseCurrency(10),
-      };
-      console.log("Alice: ", aInterface);
+        };
+        console.log("Alice: ", aInterface);
 
-      
         this.ctc = await this.acc.contract(backend);
-        console.log("this.ctc: ", this.ctc);
-
-        // Get contract info after it was deployed and assign to this.ctcInfoStr
-        this.ctc.getInfo().then((info) => {
-          console.log("getInfo(): ", info);
-          this.ctcInfoStr = JSON.stringify(info);
-        });
+        //console.log("this.ctc: ", this.ctc);
 
         // bind all the seller methods
         console.log("aInterface");
-        await this.ctc.p.Alice(aInterface);
+        this.ctc.p.Alice(aInterface);
 
-   
-
+        const info = await this.ctc.getInfo();
+        this.ctcInfoStr = JSON.stringify(info);
+        console.log("this.ctcInfoStr: ", this.ctcInfoStr);
     },
 
     async yesnoWager(res) {
@@ -272,7 +266,8 @@ export default {
           console.log("*** acceptWager", wager);
           this.wagerAtomic = wager;
           this.wager =  String(stdlib.formatCurrency(this.wagerAtomic, 4));
-          this.waitUntil( ()=> this.acceptWager !== undefined)
+          this.waitUntil( ()=> this.acceptWager == true)
+          // Exit if false
           if ( this.acceptWager == false) {
               process.exit(0);
           }
@@ -293,9 +288,6 @@ export default {
     async attachContract1() {
       this.ctc = await this.acc.contract(backend, JSON.parse(this.ctcInfoStr));
       await this.ctc.p.Bob(bInterface);
-
-      this.updateBalance();
-
       console.log("Contract attached: ", this.ctcInfoStr);
     },
   },
